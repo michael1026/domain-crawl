@@ -2,7 +2,6 @@ import * as Apify from 'apify'
 import * as readline from 'readline';
 import * as fs from 'fs';
 import * as os from 'os';
-import { parseContentTypeFromResponse } from 'apify/types/utils';
 
 const lines = [];
 
@@ -17,6 +16,8 @@ var rl = readline.createInterface({
 rl.on('line', (line) => {
     lines.push(line);
 }).on('close', async () => {
+    let scope = lines.map(line => line + '[.*]');
+
     Apify.main(async () => {
         const requestQueue = await Apify.openRequestQueue();
         
@@ -39,65 +40,34 @@ rl.on('line', (line) => {
         const handlePageFunction = async ({ request, page }) => {
             console.log(request.url);
 
-            const getParameters = async () => {
-                return await page.evaluate(() => {
-                    let parameters: Array<string> = [];
-
-                    let setObjects: Array<Set<string>> = [];
-
-                    for (let key in window) {
-                        let value = window[key];
-                        if (value instanceof Set) {
-                            setObjects.push(value);
-                        }
-                    }
-
-                    setObjects.forEach(set => set.forEach(value => parameters.push(value)));
-
-                    return parameters;
-                });
-            }
-
-            (await getParameters()).forEach(param => {
+            (await getParameters(page)).forEach(param => {
                 writeParameterToFile(param);
             });
 
             if (request.userData.label === 'START') {
-                // await Apify.utils.enqueueLinks({
-                //     page,
-                //     selector: 'a',
-                //     requestQueue,
-                //     pseudoUrls: scope
-                // });
-                console.log('enqueuing links');
-                const links = await page.evaluate(() => {
-                    return Array.from(document.getElementsByTagName('a'), a => a.href);
-                  });
+                await Apify.utils.enqueueLinks({
+                    page,
+                    selector: 'a',
+                    requestQueue,
+                    pseudoUrls: scope,
+                    limit: 20,
+                    transformRequestFunction: (request) => {
+                        // @ts-ignore
+                        request.userData.label = 'SECOND_LEVEL';
+                        return request;
+                    }
+                });
+            }
+            else if (request.userData.label === 'SECOND_LEVEL') {
+                const links = await page.$$eval('a', as => as.map(a => a.href));
 
-                for (let url in links) {
-                    console.log('does ', url, ' start with ', request.userData.baseUrl);
+                links.forEach(async (url: string) => {
                     if (!url.startsWith(request.userData.baseUrl)) return;
                     
                     await requestQueue.addRequest({
                         url,
-                        userData: { 
-                            label: 'SCRAPED_URL', 
-                            filter: request.userData.filter,
-                            baseUrl: request.userData.baseUrl
-                        }
+                        userData: { filter: request.userData.filter }
                     });
-                }
-            }
-            else {
-                const links = await page.$$eval('a', as => as.map(a => a.href));
-
-                links.forEach(async (url: string) => {
-                    if (url.startsWith(request.userData.baseUrl)) console.log(url);
-                    
-                    // await requestQueue.addRequest({
-                    //     url,
-                    //     userData: { label: 'SCRAPED_URL', filter: request.userData.filter }
-                    // });
                 });
             }
         };
@@ -107,7 +77,7 @@ rl.on('line', (line) => {
             requestQueue,
             handlePageFunction,
             launchPuppeteerOptions: {
-                useChrome: true,
+                useChrome: true, // removing this made it work on vps
                 //@ts-ignore, option is valid, but not defined
                 headless: true,
                 // @ts-ignore
@@ -123,9 +93,28 @@ rl.on('line', (line) => {
     });
 });
 
+const getParameters = async (page) => {
+    return await page.evaluate(() => {
+        let parameters: Array<string> = [];
+
+        let setObjects: Array<Set<string>> = [];
+
+        for (let key in window) {
+            let value = window[key];
+            if (value instanceof Set) {
+                setObjects.push(value);
+            }
+        }
+
+        setObjects.forEach(set => set.forEach(value => parameters.push(value)));
+
+        return parameters;
+    });
+}
+
 const writeParameterToFile = async (value: string) => {
     if (value.length > 15) return;
-    if (/\=\?\&\#\/\\\n/.test(value)) return;
+    if (/[a-zA-Z0-9_\-\.]+/.test(value)) return;
 
     const writePath = './data/parameters';
 
