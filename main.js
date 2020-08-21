@@ -40,8 +40,10 @@ var Apify = require("apify");
 var readline = require("readline");
 var fs = require("fs");
 var os = require("os");
-var lines = [];
+var log = Apify.utils.log;
 process.setMaxListeners(Infinity);
+log.setLevel(log.LEVELS.OFF);
+var lines = [];
 var rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -50,136 +52,170 @@ var rl = readline.createInterface({
 rl.on('line', function (line) {
     lines.push(line);
 }).on('close', function () { return __awaiter(void 0, void 0, void 0, function () {
-    var scope;
+    var scope, requestQueue, sources;
     return __generator(this, function (_a) {
-        scope = lines.map(function (line) { return line + '[.*]'; });
-        Apify.main(function () { return __awaiter(void 0, void 0, void 0, function () {
-            var requestQueue, handlePageFunction, getParameters, crawler;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0: return [4 /*yield*/, Apify.openRequestQueue()];
-                    case 1:
-                        requestQueue = _a.sent();
-                        lines.forEach(function (line) { return __awaiter(void 0, void 0, void 0, function () {
-                            var purl;
-                            return __generator(this, function (_a) {
-                                switch (_a.label) {
-                                    case 0:
-                                        purl = new Apify.PseudoUrl(line + "[.*]");
-                                        return [4 /*yield*/, requestQueue.addRequest({
-                                                url: line,
-                                                userData: {
-                                                    label: 'START',
-                                                    filter: purl,
-                                                    baseUrl: line
-                                                }
-                                            })];
-                                    case 1:
-                                        _a.sent();
-                                        return [2 /*return*/];
-                                }
-                            });
-                        }); });
-                        handlePageFunction = function (_a) {
-                            var request = _a.request, page = _a.page;
-                            return __awaiter(void 0, void 0, void 0, function () {
-                                var links;
-                                return __generator(this, function (_b) {
-                                    switch (_b.label) {
-                                        case 0:
-                                            console.log(request.url);
-                                            return [4 /*yield*/, getParameters(page)];
-                                        case 1:
-                                            (_b.sent()).forEach(function (param) {
-                                                writeParameterToFile(param);
-                                            });
-                                            if (!(request.userData.label === 'START')) return [3 /*break*/, 3];
-                                            return [4 /*yield*/, Apify.utils.enqueueLinks({
-                                                    page: page,
-                                                    selector: 'a',
-                                                    requestQueue: requestQueue,
-                                                    pseudoUrls: scope,
-                                                    limit: 20,
-                                                    transformRequestFunction: function (request) {
-                                                        // @ts-ignore
-                                                        request.userData.label = 'SECOND_LEVEL';
-                                                        return request;
-                                                    }
-                                                })];
-                                        case 2:
-                                            _b.sent();
-                                            return [3 /*break*/, 5];
-                                        case 3:
-                                            if (!(request.userData.label === 'SECOND_LEVEL')) return [3 /*break*/, 5];
-                                            return [4 /*yield*/, page.$$eval('a', function (as) { return as.map(function (a) { return a.href; }); })];
-                                        case 4:
-                                            links = _b.sent();
-                                            links.forEach(function (url) { return __awaiter(void 0, void 0, void 0, function () {
-                                                return __generator(this, function (_a) {
-                                                    switch (_a.label) {
-                                                        case 0:
-                                                            if (!url.startsWith(request.userData.baseUrl))
-                                                                return [2 /*return*/];
-                                                            return [4 /*yield*/, requestQueue.addRequest({
-                                                                    url: url,
-                                                                    userData: { filter: request.userData.filter }
-                                                                })];
-                                                        case 1:
-                                                            _a.sent();
-                                                            return [2 /*return*/];
-                                                    }
-                                                });
-                                            }); });
-                                            _b.label = 5;
-                                        case 5: return [2 /*return*/];
-                                    }
+        switch (_a.label) {
+            case 0:
+                scope = lines.map(function (line) { return line + '[.*]'; });
+                return [4 /*yield*/, Apify.openRequestQueue()];
+            case 1:
+                requestQueue = _a.sent();
+                sources = lines.map(function (line) {
+                    return {
+                        url: line,
+                        userData: {
+                            baseUrl: line,
+                            label: 'START'
+                        }
+                    };
+                });
+                Apify.main(function () { return __awaiter(void 0, void 0, void 0, function () {
+                    var rl, handlePageFunction, crawler;
+                    return __generator(this, function (_a) {
+                        switch (_a.label) {
+                            case 0:
+                                rl = new Apify.RequestList({
+                                    sources: sources,
+                                    persistRequestsKey: null,
+                                    keepDuplicateUrls: false
                                 });
-                            });
-                        };
-                        getParameters = function (page) { return __awaiter(void 0, void 0, void 0, function () {
-                            return __generator(this, function (_a) {
-                                switch (_a.label) {
-                                    case 0: return [4 /*yield*/, page.evaluate(function () {
-                                            var parameters = [];
-                                            var setObjects = [];
-                                            for (var key in window) {
-                                                var value = window[key];
-                                                if (value instanceof Set) {
-                                                    setObjects.push(value);
-                                                }
+                                return [4 /*yield*/, rl.initialize()];
+                            case 1:
+                                _a.sent();
+                                handlePageFunction = function (_a) {
+                                    var request = _a.request, page = _a.page;
+                                    return __awaiter(void 0, void 0, void 0, function () {
+                                        var links;
+                                        return __generator(this, function (_b) {
+                                            switch (_b.label) {
+                                                case 0:
+                                                    console.log(request.url);
+                                                    return [4 /*yield*/, getParameters(page)];
+                                                case 1:
+                                                    (_b.sent()).forEach(function (param) {
+                                                        writeParameterToFile(param);
+                                                    });
+                                                    // if (request.userData.label === 'START') {
+                                                    //     await Apify.utils.enqueueLinks({
+                                                    //         page,
+                                                    //         selector: 'a',
+                                                    //         requestQueue,
+                                                    //         pseudoUrls: scope,
+                                                    //         limit: 20,
+                                                    //         transformRequestFunction: (request) => {
+                                                    //             // @ts-ignore
+                                                    //             request.userData.label = 'SECOND_LEVEL';
+                                                    //             return request;
+                                                    //         }
+                                                    //     });
+                                                    // }
+                                                    // else 
+                                                    console.log('before start');
+                                                    if (!(request.userData.label === 'START')) return [3 /*break*/, 3];
+                                                    // const links = await page.$$eval('a', as => as.map(a => a.href));
+                                                    // links.forEach(async (url: string) => {
+                                                    //     if (!url.startsWith(request.userData.baseUrl)) return;
+                                                    //     await sources.push({
+                                                    //         url,
+                                                    //         userData: {
+                                                    //             baseUrl: null,
+                                                    //             label: 'SECONDARY'
+                                                    //         }
+                                                    //     });
+                                                    //     await rl.initialize();
+                                                    // });
+                                                    return [4 /*yield*/, Apify.utils.enqueueLinks({
+                                                            page: page,
+                                                            selector: 'a',
+                                                            requestQueue: requestQueue,
+                                                            pseudoUrls: scope,
+                                                            limit: 20,
+                                                            transformRequestFunction: function (request) {
+                                                                // @ts-ignore
+                                                                request.userData.label = 'SECONDARY';
+                                                                return request;
+                                                            }
+                                                        })];
+                                                case 2:
+                                                    // const links = await page.$$eval('a', as => as.map(a => a.href));
+                                                    // links.forEach(async (url: string) => {
+                                                    //     if (!url.startsWith(request.userData.baseUrl)) return;
+                                                    //     await sources.push({
+                                                    //         url,
+                                                    //         userData: {
+                                                    //             baseUrl: null,
+                                                    //             label: 'SECONDARY'
+                                                    //         }
+                                                    //     });
+                                                    //     await rl.initialize();
+                                                    // });
+                                                    _b.sent();
+                                                    return [3 /*break*/, 5];
+                                                case 3:
+                                                    if (!(request.userData.label === 'SECONDARY')) return [3 /*break*/, 5];
+                                                    return [4 /*yield*/, page.$$eval('a', function (as) { return as.map(function (a) { return a.href; }); })];
+                                                case 4:
+                                                    links = _b.sent();
+                                                    links.forEach(function (url) { return __awaiter(void 0, void 0, void 0, function () {
+                                                        return __generator(this, function (_a) {
+                                                            console.log(url);
+                                                            return [2 /*return*/];
+                                                        });
+                                                    }); });
+                                                    _b.label = 5;
+                                                case 5: return [2 /*return*/];
                                             }
-                                            setObjects.forEach(function (set) { return set.forEach(function (value) { return parameters.push(value); }); });
-                                            return parameters;
-                                        })];
-                                    case 1: return [2 /*return*/, _a.sent()];
-                                }
-                            });
-                        }); };
-                        crawler = new Apify.PuppeteerCrawler({
-                            requestQueue: requestQueue,
-                            handlePageFunction: handlePageFunction,
-                            launchPuppeteerOptions: {
-                                useChrome: true,
-                                //@ts-ignore, option is valid, but not defined
-                                headless: true,
-                                // @ts-ignore
-                                args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-                                // @ts-ignore
-                                ignoreHTTPSErrors: true
-                            },
-                            handleFailedRequestFunction: function () { },
-                            maxConcurrency: 10
-                        });
-                        return [4 /*yield*/, crawler.run()];
-                    case 2:
-                        _a.sent();
-                        return [2 /*return*/];
-                }
-            });
-        }); });
-        return [2 /*return*/];
+                                        });
+                                    });
+                                };
+                                crawler = new Apify.PuppeteerCrawler({
+                                    requestList: rl,
+                                    requestQueue: requestQueue,
+                                    handlePageFunction: handlePageFunction,
+                                    launchPuppeteerOptions: {
+                                        useChrome: true,
+                                        //@ts-ignore, option is valid, but not defined
+                                        headless: true,
+                                        // @ts-ignore
+                                        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+                                        // @ts-ignore
+                                        ignoreHTTPSErrors: true
+                                    },
+                                    handleFailedRequestFunction: function () { },
+                                    maxConcurrency: 10,
+                                    handlePageTimeoutSecs: 5,
+                                    gotoTimeoutSecs: 5
+                                });
+                                return [4 /*yield*/, crawler.run()];
+                            case 2:
+                                _a.sent();
+                                return [2 /*return*/];
+                        }
+                    });
+                }); });
+                return [2 /*return*/];
+        }
     });
 }); });
+var getParameters = function (page) { return __awaiter(void 0, void 0, void 0, function () {
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0: return [4 /*yield*/, page.evaluate(function () {
+                    var parameters = [];
+                    var setObjects = [];
+                    for (var key in window) {
+                        var value = window[key];
+                        if (value instanceof Set) {
+                            setObjects.push(value);
+                        }
+                    }
+                    setObjects.forEach(function (set) { return set.forEach(function (value) { return parameters.push(value); }); });
+                    return parameters;
+                })];
+            case 1: return [2 /*return*/, _a.sent()];
+        }
+    });
+}); };
 var writeParameterToFile = function (value) { return __awaiter(void 0, void 0, void 0, function () {
     var writePath;
     return __generator(this, function (_a) {
@@ -187,7 +223,7 @@ var writeParameterToFile = function (value) { return __awaiter(void 0, void 0, v
             case 0:
                 if (value.length > 15)
                     return [2 /*return*/];
-                if (/\=\?\&\#\/\\\n/.test(value))
+                if (/[a-zA-Z0-9_\-\.]+/.test(value))
                     return [2 /*return*/];
                 writePath = './data/parameters';
                 return [4 /*yield*/, fs.writeFile(writePath, null, { flag: 'wx' }, function (err) {

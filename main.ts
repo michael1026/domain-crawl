@@ -3,11 +3,13 @@ import * as readline from 'readline';
 import * as fs from 'fs';
 import * as os from 'os';
 
-const lines = [];
+const { log } = Apify.utils;
 
 process.setMaxListeners(Infinity);
+log.setLevel(log.LEVELS.OFF);
 
-var rl = readline.createInterface({
+const lines = [];
+const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
     terminal: false
@@ -16,23 +18,40 @@ var rl = readline.createInterface({
 rl.on('line', (line) => {
     lines.push(line);
 }).on('close', async () => {
-    let scope = lines.map(line => line + '[.*]');
+    const scope = lines.map(line => line + '[.*]');
+    const requestQueue = await Apify.openRequestQueue();
+    const sources = lines.map(line => {
+        return {
+            url: line,
+            userData: {
+                baseUrl: line,
+                label: 'START'
+            }
+        }
+    });
 
     Apify.main(async () => {
-        const requestQueue = await Apify.openRequestQueue();
-        
-        lines.forEach(async line => {
-            const purl = new Apify.PseudoUrl(`${line}[.*]`);
-
-            await requestQueue.addRequest({ 
-                url: line, 
-                userData: { 
-                    label: 'START', 
-                    filter: purl,
-                    baseUrl: line
-                }
-            })
+        // const requestQueue = await Apify.openRequestQueue();
+        const rl = new Apify.RequestList({
+            sources,
+            persistRequestsKey: null,
+            keepDuplicateUrls: false
         });
+
+        await rl.initialize();
+
+        // lines.forEach(async line => {
+        //     const purl = new Apify.PseudoUrl(`${line}[.*]`);
+
+        //     await requestQueue.addRequest({ 
+        //         url: line, 
+        //         userData: { 
+        //             label: 'START', 
+        //             filter: purl,
+        //             baseUrl: line
+        //         }
+        //     });
+        // });
 
         // Create a RequestList
         // const requestList = await Apify.openRequestList('my-list', lines);
@@ -44,7 +63,37 @@ rl.on('line', (line) => {
                 writeParameterToFile(param);
             });
 
+            // if (request.userData.label === 'START') {
+            //     await Apify.utils.enqueueLinks({
+            //         page,
+            //         selector: 'a',
+            //         requestQueue,
+            //         pseudoUrls: scope,
+            //         limit: 20,
+            //         transformRequestFunction: (request) => {
+            //             // @ts-ignore
+            //             request.userData.label = 'SECOND_LEVEL';
+            //             return request;
+            //         }
+            //     });
+            // }
+            // else 
+            console.log('before start');
             if (request.userData.label === 'START') {
+                // const links = await page.$$eval('a', as => as.map(a => a.href));
+
+                // links.forEach(async (url: string) => {
+                //     if (!url.startsWith(request.userData.baseUrl)) return;
+                //     await sources.push({
+                //         url,
+                //         userData: {
+                //             baseUrl: null,
+                //             label: 'SECONDARY'
+                //         }
+                //     });
+                //     await rl.initialize();
+                // });
+
                 await Apify.utils.enqueueLinks({
                     page,
                     selector: 'a',
@@ -53,27 +102,22 @@ rl.on('line', (line) => {
                     limit: 20,
                     transformRequestFunction: (request) => {
                         // @ts-ignore
-                        request.userData.label = 'SECOND_LEVEL';
+                        request.userData.label = 'SECONDARY';
                         return request;
                     }
                 });
-            }
-            else if (request.userData.label === 'SECOND_LEVEL') {
+            } else if (request.userData.label === 'SECONDARY') {
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 
                 links.forEach(async (url: string) => {
-                    if (!url.startsWith(request.userData.baseUrl)) return;
-                    
-                    await requestQueue.addRequest({
-                        url,
-                        userData: { filter: request.userData.filter }
-                    });
+                    console.log(url);
                 });
             }
         };
 
         // Create a PuppeteerCrawler
         const crawler = new Apify.PuppeteerCrawler({
+            requestList: rl,
             requestQueue,
             handlePageFunction,
             launchPuppeteerOptions: {
@@ -85,8 +129,10 @@ rl.on('line', (line) => {
                 // @ts-ignore
                 ignoreHTTPSErrors: true,
             },
-            handleFailedRequestFunction: () => {},
-            maxConcurrency: 10
+            handleFailedRequestFunction: () => { },
+            maxConcurrency: 10,
+            handlePageTimeoutSecs: 5,
+            gotoTimeoutSecs: 5
         });
 
         await crawler.run();
