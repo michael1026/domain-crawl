@@ -85,70 +85,34 @@ rl.on('line', function (line) {
                                 handlePageFunction = function (_a) {
                                     var request = _a.request, page = _a.page;
                                     return __awaiter(void 0, void 0, void 0, function () {
-                                        var links;
+                                        var parsedUrl, combinedParsedUrl, links;
                                         return __generator(this, function (_b) {
                                             switch (_b.label) {
                                                 case 0:
+                                                    parsedUrl = new URL(request.userData.baseUrl);
+                                                    combinedParsedUrl = parsedUrl.protocol + '//' + parsedUrl.host;
                                                     console.log(request.url);
                                                     return [4 /*yield*/, getParameters(page)];
                                                 case 1:
                                                     (_b.sent()).forEach(function (param) {
                                                         writeParameterToFile(param);
                                                     });
-                                                    // if (request.userData.label === 'START') {
-                                                    //     await Apify.utils.enqueueLinks({
-                                                    //         page,
-                                                    //         selector: 'a',
-                                                    //         requestQueue,
-                                                    //         pseudoUrls: scope,
-                                                    //         limit: 20,
-                                                    //         transformRequestFunction: (request) => {
-                                                    //             // @ts-ignore
-                                                    //             request.userData.label = 'SECOND_LEVEL';
-                                                    //             return request;
-                                                    //         }
-                                                    //     });
-                                                    // }
-                                                    // else 
-                                                    console.log('before start');
                                                     if (!(request.userData.label === 'START')) return [3 /*break*/, 3];
-                                                    // const links = await page.$$eval('a', as => as.map(a => a.href));
-                                                    // links.forEach(async (url: string) => {
-                                                    //     if (!url.startsWith(request.userData.baseUrl)) return;
-                                                    //     await sources.push({
-                                                    //         url,
-                                                    //         userData: {
-                                                    //             baseUrl: null,
-                                                    //             label: 'SECONDARY'
-                                                    //         }
-                                                    //     });
-                                                    //     await rl.initialize();
-                                                    // });
                                                     return [4 /*yield*/, Apify.utils.enqueueLinks({
                                                             page: page,
                                                             selector: 'a',
                                                             requestQueue: requestQueue,
                                                             pseudoUrls: scope,
                                                             limit: 20,
-                                                            transformRequestFunction: function (request) {
+                                                            transformRequestFunction: function (requestToTransform) {
                                                                 // @ts-ignore
-                                                                request.userData.label = 'SECONDARY';
-                                                                return request;
+                                                                requestToTransform.userData.label = 'SECONDARY';
+                                                                // @ts-ignore
+                                                                requestToTransform.userData.baseUrl = request.url;
+                                                                return requestToTransform;
                                                             }
                                                         })];
                                                 case 2:
-                                                    // const links = await page.$$eval('a', as => as.map(a => a.href));
-                                                    // links.forEach(async (url: string) => {
-                                                    //     if (!url.startsWith(request.userData.baseUrl)) return;
-                                                    //     await sources.push({
-                                                    //         url,
-                                                    //         userData: {
-                                                    //             baseUrl: null,
-                                                    //             label: 'SECONDARY'
-                                                    //         }
-                                                    //     });
-                                                    //     await rl.initialize();
-                                                    // });
                                                     _b.sent();
                                                     return [3 /*break*/, 5];
                                                 case 3:
@@ -156,12 +120,11 @@ rl.on('line', function (line) {
                                                     return [4 /*yield*/, page.$$eval('a', function (as) { return as.map(function (a) { return a.href; }); })];
                                                 case 4:
                                                     links = _b.sent();
-                                                    links.forEach(function (url) { return __awaiter(void 0, void 0, void 0, function () {
-                                                        return __generator(this, function (_a) {
+                                                    links.forEach(function (url) {
+                                                        if (url.startsWith(combinedParsedUrl)) {
                                                             console.log(url);
-                                                            return [2 /*return*/];
-                                                        });
-                                                    }); });
+                                                        }
+                                                    });
                                                     _b.label = 5;
                                                 case 5: return [2 /*return*/];
                                             }
