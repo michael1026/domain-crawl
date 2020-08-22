@@ -1,8 +1,8 @@
 import * as Apify from 'apify'
 import * as readline from 'readline';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as url from 'url';
+import { Logger } from './utils/logger';
+import { DOMXSSScanner } from './scanner/DOMXSSScanner';
+import { PuppeteerHandlePage } from 'apify';
 
 const { log } = Apify.utils;
 
@@ -15,6 +15,7 @@ const rl = readline.createInterface({
     output: process.stdout,
     terminal: false
 });
+const logger = new Logger();
 
 rl.on('line', (line) => {
     lines.push(line);
@@ -30,10 +31,11 @@ rl.on('line', (line) => {
             }
         }
     });
+
+    lines.length = 0;
     
 
     Apify.main(async () => {
-        // const requestQueue = await Apify.openRequestQueue();
         const rl = new Apify.RequestList({
             sources,
             persistRequestsKey: null,
@@ -42,17 +44,15 @@ rl.on('line', (line) => {
 
         await rl.initialize();
 
-        const handlePageFunction = async ({ request, page }) => {
-            const parsedUrl = new URL(request.userData.baseUrl);
-            const combinedParsedUrl = parsedUrl.protocol + '//' + parsedUrl.host;
-
-            console.log(request.url);
-
-            (await getParameters(page)).forEach(param => {
-                writeParameterToFile(param);
-            });
+        const handlePageFunction: PuppeteerHandlePage = async ({ request, page, response }) => {
+            const parsedUrl: URL | null = request?.userData?.baseUrl ? new URL(request.userData.baseUrl) : null;
+            const combinedParsedUrl = parsedUrl ? parsedUrl.protocol + '//' + parsedUrl.host : '';
+            const domXssScanner = new DOMXSSScanner(requestQueue);
 
             if (request.userData.label === 'START') {
+                //await getParameters(page);
+                getUrlParameters(request.url);
+                domXssScanner.scan(request.url);
                 await Apify.utils.enqueueLinks({
                     page,
                     selector: 'a',
@@ -61,18 +61,29 @@ rl.on('line', (line) => {
                     limit: 20,
                     transformRequestFunction: (requestToTransform) => {
                         // @ts-ignore
-                        requestToTransform.userData.label = 'SECONDARY';
-                        // @ts-ignore
                         requestToTransform.userData.baseUrl = request.url;
                         return requestToTransform;
                     }
                 });
-            } else if (request.userData.label === 'SECONDARY') {
+            } else if (request.userData.label === 'SCAN') {
+                const stringIsIncluded = await page.evaluate(() => {
+                    return document.querySelectorAll('[data-wrtqva]').length > 0;
+                });
+
+                if (stringIsIncluded) logger.logGETXSS(request.url);
+            } else if (response.headers()['content-type'].includes('text/html')) {
+                
+                //@ts-ignore
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 
-                links.forEach(url => {
-                    if (url.startsWith(combinedParsedUrl)) {
-                        console.log(url);
+                logger.logUrl(request.url);
+                domXssScanner.scan(request.url);
+
+                links.forEach(link => {
+                    if (combinedParsedUrl && link.startsWith(combinedParsedUrl)) {
+                        logger.logUrl(link);
+                        getUrlParameters(link);
+                        domXssScanner.scan(link);
                     }
                 });
             }
@@ -115,32 +126,16 @@ const getParameters = async (page) => {
             }
         }
 
-        setObjects.forEach(set => set.forEach(value => parameters.push(value)));
+        //setObjects.forEach(set => set.forEach(value => logger.logParameter(value)));
 
         return parameters;
     });
 }
 
-const writeParameterToFile = async (value: string) => {
-    if (value.length > 15) return;
-    if (/[a-zA-Z0-9_\-\.]+/.test(value)) return;
-
-    const writePath = './data/parameters';
-
-    await fs.writeFile(writePath, null, { flag: 'wx' }, function (err) {
-        if (err) return;
-    });
-
-    await fs.readFile(writePath, 'utf8', (err, data) => {
-        let regexString = `^${value}$`;
-        let re = new RegExp(regexString, 'g');
-        if (err) return;
-        if (re.test(data)) return;
-    });
-
-    await fs.open(writePath, 'a', 666, function (e, id) {
-        fs.write(id, value + os.EOL, null, 'utf8', function () {
-            fs.close(id, null);
-        });
-    });
+const getUrlParameters = (url: string) => {
+    const parsedPageUrl = new URL(url);
+    for (const param of parsedPageUrl.searchParams.keys()) {
+        if (!/\b[a-zA-Z0-9_\-\[\]]+\b/.test(param)) return;
+        logger.logParameter(param);
+    }
 }

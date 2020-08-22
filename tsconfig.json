@@ -1,21 +1,18 @@
 {
     "compilerOptions": {
-        "target": "es2018",
+        "target": "es6",
         "module": "commonjs",
         "moduleResolution": "node",
         "strict": true,
         "noImplicitAny": false,
         "strictNullChecks": false,
+        "downlevelIteration": true,
         "lib": [
-            "es2018",
-            "es2018.asynciterable",
+            "es6",
             "dom",
             "dom.iterable"
         ],
         "rootDir": "src/",
         "outDir": "build/"
-    },
-    "include": [
-        "src/"
-    ]
+    }
 }
