@@ -11,21 +11,21 @@ export class DOMXSSScanner {
         this.requestQueue = requestQueue;
     }
 
-    scan(url: string) {
+    async scan(url: string) {
         const parsedUrl = new URL(url);
-        this.scanGetParameters(parsedUrl);
-        this.scanHash(parsedUrl);
+        await this.scanGetParameters(parsedUrl);
+        await this.scanHash(parsedUrl);
     }
 
-    private scanGetParameters(url: URL) {
+    private async scanGetParameters(url: URL) {
         const parameter = url.searchParams.entries().next();
         if (parameter === null) return;
 
-        this.payloads.forEach(payload => {
+        for (const payload of this.payloads) {
             let modifiedUrl = url;
             for (const [key, value] of modifiedUrl.searchParams) {
                 modifiedUrl.searchParams.set(key, value + payload);
-                this.requestQueue.addRequest({
+                await this.requestQueue.addRequest({
                     url: modifiedUrl.href,
                     userData: {
                         label: 'SCAN',
@@ -35,15 +35,15 @@ export class DOMXSSScanner {
                 });
                 modifiedUrl.searchParams.set(key, value);
             }
-        });
+        }
     }
 
-    private scanHash(url: URL) {
-        this.payloads.forEach(payload => {
+    private async scanHash(url: URL) {
+        for (const payload of this.payloads) {
             let modifiedUrl = url;
             modifiedUrl.hash = payload;
             modifiedUrl.searchParams.append('test123', 'test123');
-            this.requestQueue.addRequest({
+            await this.requestQueue.addRequest({
                 url: modifiedUrl.href,
                 userData: {
                     label: 'SCAN',
@@ -52,6 +52,6 @@ export class DOMXSSScanner {
                 }
             });
             modifiedUrl.searchParams.delete('test123');
-        });
+        }
     }
 }

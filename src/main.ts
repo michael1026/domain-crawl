@@ -2,12 +2,13 @@ import * as Apify from 'apify'
 import * as readline from 'readline';
 import { Logger } from './utils/logger';
 import { DOMXSSScanner } from './scanner/DOMXSSScanner';
-import { PuppeteerHandlePage } from 'apify';
+import { PuppeteerHandlePage, RequestQueue } from 'apify';
+import { Page } from 'puppeteer';
 
 const { log } = Apify.utils;
 
 process.setMaxListeners(Infinity);
-log.setLevel(log.LEVELS.OFF);
+//log.setLevel(log.LEVELS.OFF);
 
 const lines = [];
 const rl = readline.createInterface({
@@ -51,8 +52,9 @@ rl.on('line', (line) => {
 
             if (request.userData.label === 'START') {
                 //await getParameters(page);
+                await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 getUrlParameters(request.url);
-                domXssScanner.scan(request.url);
+                await domXssScanner.scan(request.url);
                 await Apify.utils.enqueueLinks({
                     page,
                     selector: 'a',
@@ -77,15 +79,16 @@ rl.on('line', (line) => {
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 
                 logger.logUrl(request.url);
-                domXssScanner.scan(request.url);
+                await domXssScanner.scan(request.url);
+                await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
 
-                links.forEach(link => {
+                for (const link of links) {
                     if (combinedParsedUrl && link.startsWith(combinedParsedUrl)) {
                         logger.logUrl(link);
                         getUrlParameters(link);
-                        domXssScanner.scan(link);
+                        await domXssScanner.scan(link);
                     }
-                });
+                }
             }
         };
 
@@ -138,4 +141,22 @@ const getUrlParameters = (url: string) => {
         if (!/\b[a-zA-Z0-9_\-\[\]]+\b/.test(param)) return;
         logger.logParameter(param);
     }
+}
+
+const enqueueUrlWithInputGETParameters = async (url: string, page: Page, requestQueue: RequestQueue, baseUrl: string) => {
+    const parsedPageUrl = new URL(url);
+    const inputsNames = await page.$$eval('input', els => els.filter(el => el.getAttribute('name')).map(el => el.getAttribute('name')));
+
+    for (const name of inputsNames) {
+        if (!parsedPageUrl.searchParams.has(name)) {
+            parsedPageUrl.searchParams.append(name, '1');
+        }
+    }
+    
+    await requestQueue.addRequest({
+        url: parsedPageUrl.href,
+        userData: {
+            baseUrl
+        }
+    });
 }
