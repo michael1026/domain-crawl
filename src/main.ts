@@ -72,7 +72,12 @@ rl.on('line', (line) => {
                     return document.querySelectorAll('[data-wrtqva]').length > 0;
                 });
 
-                if (stringIsIncluded) logger.logGETXSS(request.url);
+                if (stringIsIncluded) {
+                    logger.logGETXSS(request.url);
+                    console.log(document.querySelectorAll('[data-wrtqva]'))
+                    console.log(document.querySelectorAll('[data-wrtqva]'))
+                    console.log('-----------------')
+                }
             } else if (response.headers()['content-type'].includes('text/html')) {
                 
                 //@ts-ignore
@@ -98,7 +103,6 @@ rl.on('line', (line) => {
             requestQueue,
             handlePageFunction,
             launchPuppeteerOptions: {
-                useChrome: true, // removing this made it work on vps
                 //@ts-ignore, option is valid, but not defined
                 headless: true,
                 // @ts-ignore
