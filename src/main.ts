@@ -8,7 +8,7 @@ import { Page } from 'puppeteer';
 const { log } = Apify.utils;
 
 process.setMaxListeners(Infinity);
-//log.setLevel(log.LEVELS.OFF);
+log.setLevel(log.LEVELS.OFF);
 
 const lines = [];
 const rl = readline.createInterface({
