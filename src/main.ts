@@ -1,5 +1,4 @@
 import * as Apify from 'apify'
-import * as readline from 'readline';
 import { Logger } from './utils/logger';
 import { DOMXSSScanner } from './scanner/DOMXSSScanner';
 import { PuppeteerHandlePage, RequestQueue } from 'apify';
@@ -8,33 +7,36 @@ import { Page } from 'puppeteer';
 const { log } = Apify.utils;
 
 process.setMaxListeners(Infinity);
+process.stdin.setEncoding('utf-8');
 log.setLevel(log.LEVELS.OFF);
 
-const lines = [];
-const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: false
-});
 const logger = new Logger();
+const sources: any = [];
 
-rl.on('line', (line) => {
-    lines.push(line);
-}).on('close', async () => {
-    const scope = lines.map(line => line + '[.*]');
-    const requestQueue = await Apify.openRequestQueue();
-    const sources = lines.map(line => {
-        return {
-            url: line,
-            userData: {
-                baseUrl: line,
-                label: 'START'
+let text = '';
+
+process.stdin.on('data', (data) => {
+    if (data) {
+        text += data;
+
+        const lines = text.split("\n");
+        lines.forEach(line => {
+            if (line) {
+                sources.push({
+                    url: line,
+                    userData: {
+                        baseUrl: line,
+                        label: 'START'
+                    }
+                });
             }
-        }
-    });
+        });
+    }
+});
 
-    lines.length = 0;
-    
+process.stdin.on('end', async () => {
+    const scope = sources.map(source => source.url + '[.*]');
+    const requestQueue = await Apify.openRequestQueue();
 
     Apify.main(async () => {
         const rl = new Apify.RequestList({
@@ -74,12 +76,9 @@ rl.on('line', (line) => {
 
                 if (stringIsIncluded) {
                     logger.logGETXSS(request.url);
-                    console.log(document.querySelectorAll('[data-wrtqva]'))
-                    console.log(document.querySelectorAll('[data-wrtqva]'))
-                    console.log('-----------------')
                 }
             } else if (response.headers()['content-type'].includes('text/html')) {
-                
+
                 //@ts-ignore
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 
@@ -156,7 +155,7 @@ const enqueueUrlWithInputGETParameters = async (url: string, page: Page, request
             parsedPageUrl.searchParams.append(name, '1');
         }
     }
-    
+
     await requestQueue.addRequest({
         url: parsedPageUrl.href,
         userData: {
