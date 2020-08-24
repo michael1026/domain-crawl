@@ -35,7 +35,6 @@ process.stdin.on('data', (data) => {
 });
 
 process.stdin.on('end', async () => {
-    const scope = sources.map(source => source.url + '[.*]');
     const requestQueue = await Apify.openRequestQueue();
 
     Apify.main(async () => {
@@ -51,6 +50,7 @@ process.stdin.on('end', async () => {
             const parsedUrl: URL | null = request?.userData?.baseUrl ? new URL(request.userData.baseUrl) : null;
             const combinedParsedUrl = parsedUrl ? parsedUrl.protocol + '//' + parsedUrl.host : '';
             const domXssScanner = new DOMXSSScanner(requestQueue);
+            const scope = [request.userData.baseUrl + '[.*]'];
 
             if (request.userData.label === 'START') {
                 //await getParameters(page);
@@ -110,7 +110,7 @@ process.stdin.on('end', async () => {
                 ignoreHTTPSErrors: true,
             },
             handleFailedRequestFunction: () => { },
-            maxConcurrency: 10,
+            maxConcurrency: 25,
             handlePageTimeoutSecs: 5,
             gotoTimeoutSecs: 5
         });
