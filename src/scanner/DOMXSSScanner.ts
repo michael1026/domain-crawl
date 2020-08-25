@@ -1,9 +1,10 @@
 import { RequestQueue } from "apify";
+import { Page } from "puppeteer";
 
 export class DOMXSSScanner {
     public readonly payloads = [
-        '\'" <img data-wrtqva>', 
-        '\');document.write(\'<img data-wrtqva>', 
+        '\'" <img data-wrtqva>',
+        '\');document.write(\'<img data-wrtqva>',
         '\';document.write(\'<img data-wrtqva>'];
     requestQueue: RequestQueue;
 
@@ -53,5 +54,25 @@ export class DOMXSSScanner {
             });
             modifiedUrl.searchParams.delete('test123');
         }
+    }
+
+    public async scanPOSTListener(page: Page): Promise<boolean> {
+        const payload = this.payloads[0];
+
+        await page.evaluate((payload) => {
+            window.postMessage(payload, window.location.href);
+        }, payload);
+
+        const xssFound = await page.evaluate(() => {
+            let result = false;
+
+            if (document.querySelectorAll('[data-wrtqva]').length > 0) {
+                result = true;
+            }
+
+            return result;
+        });
+
+        return xssFound;
     }
 }

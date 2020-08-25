@@ -69,6 +69,10 @@ process.stdin.on('end', async () => {
                         return requestToTransform;
                     }
                 });
+                
+                if (await domXssScanner.scanPOSTListener(page)) {
+                    logger.logPOSTListenerXSS(request.url);
+                }
             } else if (request.userData.label === 'SCAN') {
                 const stringIsIncluded = await page.evaluate(() => {
                     return document.querySelectorAll('[data-wrtqva]').length > 0;
@@ -85,6 +89,10 @@ process.stdin.on('end', async () => {
                 logger.logUrl(request.url);
                 await domXssScanner.scan(request.url);
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
+
+                if (await domXssScanner.scanPOSTListener(page)) {
+                    logger.logPOSTListenerXSS(request.url);
+                }
 
                 for (const link of links) {
                     if (combinedParsedUrl && link.startsWith(combinedParsedUrl)) {

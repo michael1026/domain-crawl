@@ -10,4 +10,8 @@ export class Logger {
     public logGETXSS(url: string) {
         console.log('[XSS]', url);
     }
+
+    public logPOSTListenerXSS(url: string) {
+        console.log('[PostMessage XSS]', url);
+    }
 }
