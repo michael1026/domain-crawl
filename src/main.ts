@@ -110,9 +110,7 @@ process.stdin.on('end', async () => {
                 ignoreHTTPSErrors: true,
             },
             handleFailedRequestFunction: () => { },
-            maxConcurrency: 25,
-            handlePageTimeoutSecs: 5,
-            gotoTimeoutSecs: 5
+            maxConcurrency: 25
         });
 
         await crawler.run();
