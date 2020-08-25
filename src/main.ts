@@ -54,6 +54,7 @@ process.stdin.on('end', async () => {
 
             if (request.userData.label === 'START') {
                 //await getParameters(page);
+                await logXhrRequests(page);
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 getUrlParameters(request.url);
                 await domXssScanner.scan(request.url);
@@ -69,7 +70,7 @@ process.stdin.on('end', async () => {
                         return requestToTransform;
                     }
                 });
-                
+
                 if (await domXssScanner.scanPOSTListener(page)) {
                     logger.logPOSTListenerXSS(request.url);
                 }
@@ -87,6 +88,7 @@ process.stdin.on('end', async () => {
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 
                 logger.logUrl(request.url);
+                await logXhrRequests(page);
                 await domXssScanner.scan(request.url);
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
 
@@ -168,4 +170,10 @@ const enqueueUrlWithInputGETParameters = async (url: string, page: Page, request
             baseUrl
         }
     });
+}
+
+const logXhrRequests = async (page: Page) => {
+    await page.setRequestInterception(true);
+
+    page.on('request', request => logger.logUrl(request.url()));
 }
