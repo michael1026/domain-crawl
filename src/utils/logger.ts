@@ -18,4 +18,8 @@ export class Logger {
     public logS3Url(sourceUrl: string, resourceUrl: string) {
         console.log(`[S3:${sourceUrl}]`, resourceUrl);
     }
+
+    public logAngularJSTemplateInjection(url: string) {
+        console.log('[Template-Injection:AngularJS]', url);
+    }
 }

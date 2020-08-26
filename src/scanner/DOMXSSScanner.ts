@@ -75,4 +75,29 @@ export class DOMXSSScanner {
 
         return xssFound;
     }
+
+    public async scanAngularJS(page: Page): Promise<boolean> {
+        const url = new URL(page.url());
+        const payload = 'wrtqva{{5*5}}';
+        let angular;
+
+        const angularJSFound = await page.evaluate(() => typeof angular !== 'undefined');
+
+        if (!angularJSFound) {
+            return;
+        }
+
+        for (const [key, value] of url.searchParams) {
+            url.searchParams.set(key, value + payload);
+            await this.requestQueue.addRequest({
+                url: url.href,
+                userData: {
+                    label: 'SCAN',
+                    scanner: 'XSS',
+                    check: 'AngularJS'
+                }
+            });
+            url.searchParams.set(key, value);
+        }
+    }
 }

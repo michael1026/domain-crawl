@@ -58,6 +58,7 @@ process.stdin.on('end', async () => {
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 getUrlParameters(request.url);
                 await domXssScanner.scan(request.url);
+                await domXssScanner.scanAngularJS(page);
                 await logS3Urls(page);
                 await Apify.utils.enqueueLinks({
                     page,
@@ -76,12 +77,21 @@ process.stdin.on('end', async () => {
                     logger.logPOSTListenerXSS(request.url);
                 }
             } else if (request.userData.label === 'SCAN') {
-                const stringIsIncluded = await page.evaluate(() => {
-                    return document.querySelectorAll('[data-wrtqva]').length > 0;
-                });
+                if (request.userData.check === 'GET') {
+                    const stringIsIncluded = await page.evaluate(() => {
+                        return document.querySelectorAll('[data-wrtqva]').length > 0;
+                    });
 
-                if (stringIsIncluded) {
-                    logger.logGETXSS(request.url);
+                    if (stringIsIncluded) {
+                        logger.logGETXSS(request.url);
+                    }
+                } else if (request.userData.check === 'AngularJS') {
+                    await page.waitFor(5000);
+                    const contents = await page.content();
+
+                    if (contents.includes('wrtqva25')) {
+                        logger.logAngularJSTemplateInjection(request.url);
+                    }
                 }
             } else if (response.headers()['content-type'].includes('text/html')) {
 
@@ -93,6 +103,7 @@ process.stdin.on('end', async () => {
                 await domXssScanner.scan(request.url);
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 await logS3Urls(page);
+                await domXssScanner.scanAngularJS(page);
 
                 if (await domXssScanner.scanPOSTListener(page)) {
                     logger.logPOSTListenerXSS(request.url);
@@ -183,7 +194,7 @@ const logXhrRequests = async (page: Page, scopeUrl: string) => {
 const logS3Urls = async (page: Page) => {
     const scriptTags = await page.evaluate(
         () => [...document.querySelectorAll('script')].map(elem => elem.src || '')
-      );
+    );
 
     for (const tag of scriptTags) {
         if (tag.includes('amazonaws.com')) {
@@ -193,8 +204,8 @@ const logS3Urls = async (page: Page) => {
 
     const imgTags = await page.evaluate(
         () => [...document.querySelectorAll('img')].map(elem => elem.src || '')
-      );
-    
+    );
+
     for (const tag in imgTags) {
         if (tag && tag.includes('amazonaws.com')) {
             logger.logS3Url(page.url(), tag);
