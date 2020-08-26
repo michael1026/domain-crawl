@@ -58,6 +58,7 @@ process.stdin.on('end', async () => {
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 getUrlParameters(request.url);
                 await domXssScanner.scan(request.url);
+                await logS3Urls(page);
                 await Apify.utils.enqueueLinks({
                     page,
                     selector: 'a',
@@ -91,6 +92,7 @@ process.stdin.on('end', async () => {
                 await logXhrRequests(page, combinedParsedUrl);
                 await domXssScanner.scan(request.url);
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
+                await logS3Urls(page);
 
                 if (await domXssScanner.scanPOSTListener(page)) {
                     logger.logPOSTListenerXSS(request.url);
@@ -176,4 +178,26 @@ const logXhrRequests = async (page: Page, scopeUrl: string) => {
     await page.setRequestInterception(true);
 
     page.on('request', request => request.url().startsWith(scopeUrl) && logger.logUrl(request.url()));
+}
+
+const logS3Urls = async (page: Page) => {
+    const scriptTags = await page.evaluate(
+        () => [...document.querySelectorAll('script')].map(elem => elem.src || '')
+      );
+
+    for (const tag of scriptTags) {
+        if (tag.includes('amazonaws.com')) {
+            logger.logS3Url(page.url(), tag);
+        }
+    }
+
+    const imgTags = await page.evaluate(
+        () => [...document.querySelectorAll('img')].map(elem => elem.src || '')
+      );
+    
+    for (const tag in imgTags) {
+        if (tag && tag.includes('amazonaws.com')) {
+            logger.logS3Url(page.url(), tag);
+        }
+    }
 }

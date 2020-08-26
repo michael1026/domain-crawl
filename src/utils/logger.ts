@@ -14,4 +14,8 @@ export class Logger {
     public logPOSTListenerXSS(url: string) {
         console.log('[PostMessage XSS]', url);
     }
+
+    public logS3Url(sourceUrl: string, resourceUrl: string) {
+        console.log(`[S3:${sourceUrl}]`, resourceUrl);
+    }
 }
