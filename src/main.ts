@@ -53,6 +53,7 @@ process.stdin.on('end', async () => {
             const scope = [request.userData.baseUrl + '[.*]'];
 
             if (request.userData.label === 'START') {
+                await page.waitFor(500);
                 //await getParameters(page);
                 await logXhrRequests(page, combinedParsedUrl);
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
@@ -77,24 +78,9 @@ process.stdin.on('end', async () => {
                     logger.logPOSTListenerXSS(request.url);
                 }
             } else if (request.userData.label === 'SCAN') {
-                if (request.userData.check === 'GET') {
-                    const stringIsIncluded = await page.evaluate(() => {
-                        return document.querySelectorAll('[data-wrtqva]').length > 0;
-                    });
-
-                    if (stringIsIncluded) {
-                        logger.logGETXSS(request.url);
-                    }
-                } else if (request.userData.check === 'AngularJS') {
-                    await page.waitFor(5000);
-                    const contents = await page.content();
-
-                    if (contents.includes('wrtqva25')) {
-                        logger.logAngularJSTemplateInjection(request.url);
-                    }
-                }
+                await domXssScanner.checkResponse(page, request, logger);
             } else if (response.headers()['content-type'].includes('text/html')) {
-
+                await page.waitFor(500);
                 //@ts-ignore
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 

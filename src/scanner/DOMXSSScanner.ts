@@ -1,11 +1,20 @@
 import { RequestQueue } from "apify";
 import { Page } from "puppeteer";
+import * as Apify from 'apify'
+import { Logger } from "../utils/logger";
+
+const payloads = [
+    '\'" <img data-wrtqva>',
+    '\');document.write(\'<img data-wrtqva>',
+    '\';document.write(\'<img data-wrtqva>'];
+
+enum DetectionStrings {
+    AngularJSTemplatePayload = 'wrtqva{{5*5}}',
+    AngularJSDetectionKeyword = 'wrtqva25',
+    XSSDetectionSelector = '[data-wrtqva]'
+}
 
 export class DOMXSSScanner {
-    public readonly payloads = [
-        '\'" <img data-wrtqva>',
-        '\');document.write(\'<img data-wrtqva>',
-        '\';document.write(\'<img data-wrtqva>'];
     requestQueue: RequestQueue;
 
     constructor(requestQueue: RequestQueue) {
@@ -22,7 +31,7 @@ export class DOMXSSScanner {
         const parameter = url.searchParams.entries().next();
         if (parameter === null) return;
 
-        for (const payload of this.payloads) {
+        for (const payload of payloads) {
             let modifiedUrl = url;
             for (const [key, value] of modifiedUrl.searchParams) {
                 modifiedUrl.searchParams.set(key, value + payload);
@@ -40,7 +49,7 @@ export class DOMXSSScanner {
     }
 
     private async scanHash(url: URL) {
-        for (const payload of this.payloads) {
+        for (const payload of payloads) {
             let modifiedUrl = url;
             modifiedUrl.hash = payload;
             modifiedUrl.searchParams.append('test123', 'test123');
@@ -57,7 +66,7 @@ export class DOMXSSScanner {
     }
 
     public async scanPOSTListener(page: Page): Promise<boolean> {
-        const payload = this.payloads[0];
+        const payload = payloads[0];
 
         await page.evaluate((payload) => {
             window.postMessage(payload, window.location.href);
@@ -98,6 +107,25 @@ export class DOMXSSScanner {
                 }
             });
             url.searchParams.set(key, value);
+        }
+    }
+
+    public async checkResponse(page: Page, request: Apify.Request, logger: Logger) {
+        if (request.userData.check === 'GET') {
+            const stringIsIncluded = await page.evaluate(() => {
+                return document.querySelectorAll('[data-wrtqva]').length > 0;
+            });
+
+            if (stringIsIncluded) {
+                logger.logGETXSS(request.url);
+            }
+        } else if (request.userData.check === 'AngularJS') {
+            await page.waitFor(5000);
+            const contents = await page.content();
+
+            if (contents.includes('wrtqva25')) {
+                logger.logAngularJSTemplateInjection(request.url);
+            }
         }
     }
 }
