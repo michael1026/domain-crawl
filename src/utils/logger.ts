@@ -22,4 +22,8 @@ export class Logger {
     public logAngularJSTemplateInjection(url: string) {
         console.log('[Template-Injection:AngularJS]', url);
     }
+
+    public logExperimentalDOMPoisoningXSS(url: string) {
+        console.log(`[XSS:Experimental]`, url);
+    }
 }

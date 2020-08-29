@@ -54,6 +54,8 @@ export class DOMXSSScanner {
         for (const payload of payloads) {
             let modifiedUrl = url;
             modifiedUrl.hash = payload;
+            // we need to add a parameter so that it's recognized as a new request
+            // not a duplicate
             modifiedUrl.searchParams.append('test123', 'test123');
             await this.requestQueue.addRequest({
                 url: modifiedUrl.href,

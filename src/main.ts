@@ -3,6 +3,7 @@ import { Logger } from './utils/logger';
 import { DOMXSSScanner } from './scanner/DOMXSSScanner';
 import { PuppeteerHandlePage, RequestQueue, PseudoUrl } from 'apify';
 import { Page } from 'puppeteer';
+import path = require('path');
 
 const { log } = Apify.utils;
 
@@ -56,11 +57,11 @@ process.stdin.on('end', async () => {
                 await Apify.utils.puppeteer.blockRequests(page, {
                     extraUrlPatterns: ['adsbygoogle.js', 'woff2']
                 });
-                
+
                 await logXhrRequests(page, combinedParsedUrl);
 
                 await page.waitFor(500);
-                
+
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 getUrlParameters(request.url);
                 await domXssScanner.scan(request.url);
@@ -81,7 +82,7 @@ process.stdin.on('end', async () => {
                     }
                 });
 
-                
+
             } else if (request.userData.label === 'SCAN') {
                 await domXssScanner.checkResponse(page, request, logger);
             } else if (response.headers()['content-type'].includes('text/html')) {
@@ -106,13 +107,83 @@ process.stdin.on('end', async () => {
                     }
                 }
             }
+
+            let poisoned = await page.evaluate(() => {
+                //@ts-ignore
+                if (typeof window.XSSPoisoned !== 'undefined' && window.XSSPoisoned) {
+                    return true;
+                }
+                return false;
+            });
+
+            if (poisoned) {
+                logger.logExperimentalDOMPoisoningXSS(page.url())
+            }
         };
+
+        const gotoFunction = async ({ page, request }) => {
+            await page.evaluateOnNewDocument(() => {
+                // override document.write to check for poisoned sink
+                const poisonStrings = [
+                    '\'" <img data-wrt',
+                    '\'"+<img+data-wrt',
+                    '\'"%20<img%20data-wrt'];
+
+                (function () {
+                    var old = document.write;
+                    
+                    document.write = function (content) {
+                        if (content.includes(poisonStrings[0]) 
+                            || content.includes(poisonStrings[1])
+                            || content.includes(poisonStrings[2])) {
+                            //@ts-ignore
+                            window.XSSPoisoned = true;
+                        }
+                        old.call(document, content);
+                    };
+                })();
+
+                // override document.write to check for poisoned sink
+                (function () {
+                    var old = document.writeln;
+
+                    document.writeln = function (content) {
+                        if (content.includes(poisonStrings[0]) 
+                            || content.includes(poisonStrings[1])
+                            || content.includes(poisonStrings[2])) {
+                                //@ts-ignore
+                                window.XSSPoisoned = true;
+                        }
+                        old.call(document, content);
+                    };
+                })();
+
+                //@ts-ignore
+                if (typeof jQuery !== 'undefined') {
+                    (function ($) {
+                        var oldHtml = $.fn.html;
+                        $.fn.html = function (content) {
+                            if (content.includes(poisonStrings[0]) 
+                                || content.includes(poisonStrings[1])
+                                || content.includes(poisonStrings[2])) {
+                                //@ts-ignore
+                                window.XSSPoisoned = true;
+                            }
+                            oldHtml($, content);
+                        };
+                        //@ts-ignore
+                    })(jQuery);
+                }
+            });
+            return await page.goto(request.url, { waitUntil: ["domcontentloaded"], timeout: 10000 });;
+        }
 
         // Create a PuppeteerCrawler
         const crawler = new Apify.PuppeteerCrawler({
             requestList: rl,
             requestQueue,
             handlePageFunction,
+            gotoFunction,
             launchPuppeteerOptions: {
                 //@ts-ignore, option is valid, but not defined
                 headless: true,
@@ -122,7 +193,8 @@ process.stdin.on('end', async () => {
                 ignoreHTTPSErrors: true,
             },
             handleFailedRequestFunction: () => { },
-            maxConcurrency: 25
+            maxConcurrency: 25,
+            useSessionPool: true
         });
 
         await crawler.run();
