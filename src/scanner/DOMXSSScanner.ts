@@ -2,11 +2,13 @@ import { RequestQueue } from "apify";
 import { Page } from "puppeteer";
 import * as Apify from 'apify'
 import { Logger } from "../utils/logger";
+import { showCompletionScript } from "yargs";
 
 const payloads = [
     '\'" <img data-wrtqva>',
     '\');document.write(\'<img data-wrtqva>',
-    '\';document.write(\'<img data-wrtqva>'];
+    '\';document.write(\'<img data-wrtqva>',
+    '\'" <img/data-wrtqva>'];
 
 enum DetectionStrings {
     AngularJSTemplatePayload = 'wrtqva{{5*5}}',
@@ -65,7 +67,7 @@ export class DOMXSSScanner {
         }
     }
 
-    public async scanPOSTListener(page: Page): Promise<boolean> {
+    public async scanPOSTListener(page: Page, logger: Logger) {
         const payload = payloads[0];
 
         await page.evaluate((payload) => {
@@ -82,7 +84,11 @@ export class DOMXSSScanner {
             return result;
         });
 
-        return xssFound;
+        if (!xssFound) {
+            return;
+        }
+
+        logger.logPOSTListenerXSS(page.url());
     }
 
     public async scanAngularJS(page: Page): Promise<boolean> {

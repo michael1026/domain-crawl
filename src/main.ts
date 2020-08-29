@@ -1,7 +1,7 @@
 import * as Apify from 'apify'
 import { Logger } from './utils/logger';
 import { DOMXSSScanner } from './scanner/DOMXSSScanner';
-import { PuppeteerHandlePage, RequestQueue } from 'apify';
+import { PuppeteerHandlePage, RequestQueue, PseudoUrl } from 'apify';
 import { Page } from 'puppeteer';
 
 const { log } = Apify.utils;
@@ -53,14 +53,21 @@ process.stdin.on('end', async () => {
             const scope = [request.userData.baseUrl + '[.*]'];
 
             if (request.userData.label === 'START') {
-                await page.waitFor(500);
-                //await getParameters(page);
+                await Apify.utils.puppeteer.blockRequests(page, {
+                    extraUrlPatterns: ['adsbygoogle.js', 'woff2']
+                });
+                
                 await logXhrRequests(page, combinedParsedUrl);
+
+                await page.waitFor(500);
+                
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 getUrlParameters(request.url);
                 await domXssScanner.scan(request.url);
                 await domXssScanner.scanAngularJS(page);
+                await domXssScanner.scanPOSTListener(page, logger);
                 await logS3Urls(page);
+
                 await Apify.utils.enqueueLinks({
                     page,
                     selector: 'a',
@@ -74,26 +81,22 @@ process.stdin.on('end', async () => {
                     }
                 });
 
-                if (await domXssScanner.scanPOSTListener(page)) {
-                    logger.logPOSTListenerXSS(request.url);
-                }
+                
             } else if (request.userData.label === 'SCAN') {
                 await domXssScanner.checkResponse(page, request, logger);
             } else if (response.headers()['content-type'].includes('text/html')) {
+                logger.logUrl(request.url);
+                await logXhrRequests(page, combinedParsedUrl);
+
                 await page.waitFor(500);
                 //@ts-ignore
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 
-                logger.logUrl(request.url);
-                await logXhrRequests(page, combinedParsedUrl);
                 await domXssScanner.scan(request.url);
                 await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
                 await logS3Urls(page);
                 await domXssScanner.scanAngularJS(page);
-
-                if (await domXssScanner.scanPOSTListener(page)) {
-                    logger.logPOSTListenerXSS(request.url);
-                }
+                await domXssScanner.scanPOSTListener(page, logger);
 
                 for (const link of links) {
                     if (combinedParsedUrl && link.startsWith(combinedParsedUrl)) {
