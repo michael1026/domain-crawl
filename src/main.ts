@@ -259,7 +259,8 @@ const logS3Urls = async (page: Page) => {
 
     for (const tag of scriptTags) {
         if (tag.includes('amazonaws.com')) {
-            logger.logS3Url(page.url(), tag);
+            var result = /(?<=\/\/s3(\.[a-z0-9\-]+)?\.amazonaws\.com\/)([^/]+)(?=\/)|(?<=\/\/)[a-z0-9\-]+(?=\.s3\.amazonaws\.com)/.exec(tag);
+            logger.logS3Url(page.url(), result[0]);
         }
     }
 
@@ -269,7 +270,8 @@ const logS3Urls = async (page: Page) => {
 
     for (const tag in imgTags) {
         if (tag && tag.includes('amazonaws.com')) {
-            logger.logS3Url(page.url(), tag);
+            var result = /(?<=\/\/s3(\.[a-z0-9\-]+)?\.amazonaws\.com\/)([^/]+)(?=\/)|(?<=\/\/)[a-z0-9\-]+(?=\.s3\.amazonaws\.com)/.exec(tag);
+            logger.logS3Url(page.url(), result[0]);
         }
     }
 }

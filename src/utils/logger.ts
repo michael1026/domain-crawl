@@ -15,8 +15,8 @@ export class Logger {
         console.log('[PostMessage XSS]', url);
     }
 
-    public logS3Url(sourceUrl: string, resourceUrl: string) {
-        console.log(`[S3:${sourceUrl}]`, resourceUrl);
+    public logS3Url(sourceUrl: string, bucketName: string) {
+        console.log(`[S3:${bucketName}]`, sourceUrl);
     }
 
     public logAngularJSTemplateInjection(url: string) {
