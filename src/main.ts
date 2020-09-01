@@ -26,7 +26,7 @@ process.stdin.on('data', (data) => {
                 sources.push({
                     url: line,
                     userData: {
-                        baseUrl: line,
+                        baseUrl: getBaseURL(line),
                         label: 'START'
                     }
                 });
@@ -48,23 +48,30 @@ process.stdin.on('end', async () => {
         await rl.initialize();
 
         const handlePageFunction: PuppeteerHandlePage = async ({ request, page, response }) => {
-            const parsedUrl: URL | null = request?.userData?.baseUrl ? new URL(request.userData.baseUrl) : null;
-            const combinedParsedUrl = parsedUrl ? parsedUrl.protocol + '//' + parsedUrl.host : '';
             const domXssScanner = new DOMXSSScanner(requestQueue);
             const scope = [request.userData.baseUrl + '[.*]'];
 
+            await logXhrRequests(page, request.userData.baseUrl);
+
             if (request.userData.label === 'START') {
+                if (request.url !== request.loadedUrl) {
+                    logger.logUrl(request.loadedUrl);
+                }
+
                 await Apify.utils.puppeteer.blockRequests(page, {
                     extraUrlPatterns: ['adsbygoogle.js', 'woff2']
                 });
 
-                await logXhrRequests(page, combinedParsedUrl);
-
                 await page.waitFor(500);
 
-                await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
+                await enqueueUrlWithInputGETParameters(page, requestQueue, request.userData.baseUrl);
                 getUrlParameters(request.url);
-                await domXssScanner.scan(request.url);
+
+                if (request.url !== request.loadedUrl) {
+                    getUrlParameters(request.loadedUrl);
+                }
+
+                await domXssScanner.scan(request.loadedUrl);
                 await domXssScanner.scanAngularJS(page);
                 await domXssScanner.scanPOSTListener(page, logger);
                 await logS3Urls(page);
@@ -77,30 +84,27 @@ process.stdin.on('end', async () => {
                     limit: 20,
                     transformRequestFunction: (requestToTransform) => {
                         // @ts-ignore
-                        requestToTransform.userData.baseUrl = request.url;
+                        requestToTransform.userData.baseUrl = request.userData.baseUrl;
                         return requestToTransform;
                     }
                 });
-
-
             } else if (request.userData.label === 'SCAN') {
                 await domXssScanner.checkResponse(page, request, logger);
             } else if (response.headers()['content-type'].includes('text/html')) {
                 logger.logUrl(request.url);
-                await logXhrRequests(page, combinedParsedUrl);
 
                 await page.waitFor(500);
                 //@ts-ignore
                 const links = await page.$$eval('a', as => as.map(a => a.href));
 
-                await domXssScanner.scan(request.url);
-                await enqueueUrlWithInputGETParameters(request.url, page, requestQueue, combinedParsedUrl);
+                await domXssScanner.scan(request.loadedUrl);
+                await enqueueUrlWithInputGETParameters(page, requestQueue, request.userData.baseUrl);
                 await logS3Urls(page);
                 await domXssScanner.scanAngularJS(page);
                 await domXssScanner.scanPOSTListener(page, logger);
 
                 for (const link of links) {
-                    if (combinedParsedUrl && link.startsWith(combinedParsedUrl)) {
+                    if (link.startsWith(request.userData.baseUrl)) {
                         logger.logUrl(link);
                         getUrlParameters(link);
                         await domXssScanner.scan(link);
@@ -175,7 +179,7 @@ process.stdin.on('end', async () => {
                     })(jQuery);
                 }
             });
-            return await page.goto(request.url, { waitUntil: ["domcontentloaded"], timeout: 10000 });;
+            return await Apify.utils.puppeteer.gotoExtended(page, request, { waitUntil: ["domcontentloaded"], timeout: 10000 });;
         }
 
         // Create a PuppeteerCrawler
@@ -228,8 +232,8 @@ const getUrlParameters = (url: string) => {
     }
 }
 
-const enqueueUrlWithInputGETParameters = async (url: string, page: Page, requestQueue: RequestQueue, baseUrl: string) => {
-    const parsedPageUrl = new URL(url);
+const enqueueUrlWithInputGETParameters = async (page: Page, requestQueue: RequestQueue, baseUrl: string) => {
+    const parsedPageUrl = new URL(page.url());
     const inputsNames = await page.$$eval('input', els => els.filter(el => el.getAttribute('name')).map(el => el.getAttribute('name')));
 
     for (const name of inputsNames) {
@@ -270,8 +274,14 @@ const logS3Urls = async (page: Page) => {
 
     for (const tag in imgTags) {
         if (tag && tag.includes('amazonaws.com')) {
+            // extract bucket name from URL
             var result = /(?<=\/\/s3(\.[a-z0-9\-]+)?\.amazonaws\.com\/)([^/]+)(?=\/)|(?<=\/\/)[a-z0-9\-]+(?=\.s3\.amazonaws\.com)/.exec(tag);
             logger.logS3Url(page.url(), result[0]);
         }
     }
+}
+
+const getBaseURL = (url: string) => {
+    const parsedUrl = new URL(url);
+    return parsedUrl ? parsedUrl.protocol + '//' + parsedUrl.host : '';
 }
