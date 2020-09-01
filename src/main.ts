@@ -1,9 +1,8 @@
 import * as Apify from 'apify'
 import { Logger } from './utils/logger';
 import { DOMXSSScanner } from './scanner/DOMXSSScanner';
-import { PuppeteerHandlePage, RequestQueue, PseudoUrl } from 'apify';
+import { PuppeteerHandlePage, RequestQueue } from 'apify';
 import { Page } from 'puppeteer';
-import path = require('path');
 
 const { log } = Apify.utils;
 
@@ -51,6 +50,7 @@ process.stdin.on('end', async () => {
             const domXssScanner = new DOMXSSScanner(requestQueue);
             const scope = [request.userData.baseUrl + '[.*]'];
 
+            // move if puppeteer gets updated to 5.2.1
             await logXhrRequests(page, request.userData.baseUrl);
 
             if (request.userData.label === 'START') {
@@ -257,13 +257,15 @@ const logXhrRequests = async (page: Page, scopeUrl: string) => {
 }
 
 const logS3Urls = async (page: Page) => {
+    const s3BucketRegex = /(?<=\/\/s3(\.[a-z0-9\-]+)?\.amazonaws\.com\/)([^/]+)(?=\/)|(?<=\/\/)[a-z0-9\-]+(?=\.s3\.amazonaws\.com)/;
+
     const scriptTags = await page.evaluate(
         () => [...document.querySelectorAll('script')].map(elem => elem.src || '')
     );
 
     for (const tag of scriptTags) {
         if (tag.includes('amazonaws.com')) {
-            var result = /(?<=\/\/s3(\.[a-z0-9\-]+)?\.amazonaws\.com\/)([^/]+)(?=\/)|(?<=\/\/)[a-z0-9\-]+(?=\.s3\.amazonaws\.com)/.exec(tag);
+            var result = s3BucketRegex.exec(tag);
             logger.logS3Url(page.url(), result[0]);
         }
     }
@@ -275,7 +277,7 @@ const logS3Urls = async (page: Page) => {
     for (const tag in imgTags) {
         if (tag && tag.includes('amazonaws.com')) {
             // extract bucket name from URL
-            var result = /(?<=\/\/s3(\.[a-z0-9\-]+)?\.amazonaws\.com\/)([^/]+)(?=\/)|(?<=\/\/)[a-z0-9\-]+(?=\.s3\.amazonaws\.com)/.exec(tag);
+            var result = s3BucketRegex.exec(tag);
             logger.logS3Url(page.url(), result[0]);
         }
     }
