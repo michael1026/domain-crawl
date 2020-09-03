@@ -8,7 +8,7 @@ const { log } = Apify.utils;
 
 process.setMaxListeners(Infinity);
 process.stdin.setEncoding('utf-8');
-log.setLevel(log.LEVELS.OFF);
+//log.setLevel(log.LEVELS.OFF);
 
 const logger = new Logger();
 const sources: any = [];
@@ -49,10 +49,7 @@ process.stdin.on('end', async () => {
         const handlePageFunction: PuppeteerHandlePage = async ({ request, page, response }) => {
             const domXssScanner = new DOMXSSScanner(requestQueue);
             const scope = [request.userData.baseUrl + '[.*]'];
-
-            // move if puppeteer gets updated to 5.2.1
-            await logXhrRequests(page, request.userData.baseUrl);
-
+            
             if (request.userData.label === 'START') {
                 if (request.url !== request.loadedUrl) {
                     logger.logUrl(request.loadedUrl);
@@ -126,6 +123,7 @@ process.stdin.on('end', async () => {
         };
 
         const gotoFunction = async ({ page, request }) => {
+            await logXhrRequests(page, request.userData.baseUrl);
             await page.evaluateOnNewDocument(() => {
                 // override document.write to check for poisoned sink
                 const poisonStrings = [
@@ -251,8 +249,6 @@ const enqueueUrlWithInputGETParameters = async (page: Page, requestQueue: Reques
 }
 
 const logXhrRequests = async (page: Page, scopeUrl: string) => {
-    await page.setRequestInterception(true);
-
     page.on('request', request => request.url().startsWith(scopeUrl) && logger.logUrl(request.url()));
 }
 
