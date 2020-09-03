@@ -8,7 +8,7 @@ const { log } = Apify.utils;
 
 process.setMaxListeners(Infinity);
 process.stdin.setEncoding('utf-8');
-//log.setLevel(log.LEVELS.OFF);
+log.setLevel(log.LEVELS.OFF);
 
 const logger = new Logger();
 const sources: any = [];
