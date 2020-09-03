@@ -21,7 +21,7 @@ process.stdin.on('data', (data) => {
 
         const lines = text.split("\n");
         lines.forEach(line => {
-            if (line) {
+            if (line && isValidUrl(line)) {
                 sources.push({
                     url: line,
                     userData: {
@@ -287,3 +287,13 @@ const getBaseURL = (url: string) => {
     const parsedUrl = new URL(url);
     return parsedUrl ? parsedUrl.protocol + '//' + parsedUrl.host : '';
 }
+
+const isValidUrl = (string) => {
+    try {
+      new URL(string);
+    } catch (_) {
+      return false;  
+    }
+  
+    return true;
+  }
